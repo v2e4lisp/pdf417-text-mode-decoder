@@ -237,5 +237,5 @@ def pdf417_decode(img_path):
 
 
 if __name__ == '__main__':
-    pdf417_decode("/home/jinseyaluji/Pictures/123456789.gif")
-    pdf417_decode("/home/jinseyaluji/Pictures/PDF417.png")
+    pdf417_decode("./test/123456789.gif")
+    pdf417_decode("./test/PDF417.png")
