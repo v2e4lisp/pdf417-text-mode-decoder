@@ -1,6 +1,21 @@
 from PIL import Image
 import itertools
 from pdf417dict import codewords_tbl
+import sys
+
+
+# Global variables
+val_num = 0
+pdf_mode = 'text'
+text_submode = 'upper'
+text_shift = False
+
+def add_quiet_zone(im):
+    box = (15, 15, im.size[0]+15, im.size[1]+15)
+    img = Image.new('L', (im.size[0]+30, im.size[1]+30), 'white')
+    img.paste(im, box)
+    return img
+
 
 def get_img(img_path):
     return Image.open(img_path)
@@ -61,97 +76,130 @@ def get_codeword(syms, which):
 
     return False
 
-text_submode = 'upper'
-text_shift = False
-def decode_text(cw):
-    if cw >= 900:
+def decode_part(part):
+    global text_submode, text_shift
+
+    text_dict = {
+        'upper': "ABCDEFGHIJKLMNOPQRSTUVWXYZ    ",
+        'lower': "abcdefghijklmnopqrstuvwxyz    ",
+        'mixed': "0123456789&\r\t,:#-.$/+%*=^     ",
+        'punct': ";<>@[\\]_`~!\r\t,:\n-.$/\"|*()?{}' "
+    }
+
+    ret = 'unknown'
+    if text_submode == 'upper':
+        if part == 27:
+            text_submode = 'lower'
+            return 'll'
+        elif part == 28:
+            text_submode = 'mixed'
+            return 'ml'
+        elif part == 29:
+            text_shift =  'punct'
+            return 'ps'
+        else:
+            if text_shift:
+                ret = text_dict[text_shift][part]
+                text_shift = False
+            else:
+                ret = text_dict[text_submode][part]
+            return ret
+
+    elif text_submode == 'lower':
+        if part == 27:
+            text_shift = 'upper'
+            return 'as'
+        elif part == 28:
+            text_submode = 'mixed'
+            return 'ml'
+        elif part == 29:
+            text_shift = 'punct'
+            return 'ps'
+        else:
+            if text_shift:
+                ret = text_dict[text_shift][part]
+                text_shift = False
+            else:
+                ret = text_dict[text_submode][part]
+            return ret
+
+    elif text_submode == 'mixed':
+        if part == 25:
+            text_submode = 'punct'
+            return 'pl'
+        elif part == 27:
+            text_submode = 'lower'
+            return 'll'
+        elif part == 28:
+            text_submode = 'upper'
+            return 'al'
+        elif part == 29:
+            text_shift = 'punct'
+            return 'ps'
+        else:
+            if text_shift:
+                ret = text_dict[text_shift][part]
+                text_shift = False
+            else:
+                ret = text_dict[text_submode][part]
+            return ret
+
+    elif text_submode == 'punct':
+        if part == 29:
+            text_submode = 'upper'
+            return 'al'
+        else:
+            if text_shift:
+                ret = text_dict[text_shift][part]
+                text_shift = False
+            else:
+                ret = text_dict[text_submode][part]
+            return ret
+
+    else:
+        return 'Error'
+
+
+def decode_cw(cw):
+    global pdf_mode, val_num, text_submode, text_shift
+
+    if cw == 900:
+        pdf_mode = 'text'
+        text_submode = 'upper'
+        text_shift = False
+        if val_num > 0:
+            val = val_num
+            val_num = 0
+            num_str = '%d' % val
+            return (num_str[1:], '')
+        else:
+            return ''
+    elif cw == 902:
+        pdf_mode = 'num'
         return ''
+    elif cw >= 903:
+        return ''
+    else:
+        if pdf_mode == 'text':
+            return decode_text(cw)
+        elif pdf_mode == 'num':
+            decode_number(cw)
+            return ''
+
+
+def decode_text(cw):
     H = cw/30
     L = cw%30
-    upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ    ";
-    lower = "abcdefghijklmnopqrstuvwxyz    ";
-    mixed = "0123456789&\r\t,:#-.$/+%*=^     ";
-    punct = ";<>@[\\]_`~!\r\t,:\n-.$/\"|*()?{}' ";
-    text_dict = {'upper':upper, 'lower':lower,
-                 'mixed':mixed, 'punct':punct}
-
-    def decode_part(part):
-        global text_submode, text_shift
-        ret = 'unknown'
-        if text_submode == 'upper':
-            if part == 27:
-                text_submode = 'lower'
-                return 'll'
-            elif part == 28:
-                text_submode = 'mixed'
-                return 'ml'
-            elif part == 29:
-                text_shift =  'punct'
-                return 'ps'
-            else:
-                if text_shift:
-                    ret = text_dict[text_shift][part]
-                    text_shift = False
-                else:
-                    ret = text_dict[text_submode][part]
-                return ret
-
-        elif text_submode == 'lower':
-            if part == 27:
-                text_shift = 'upper'
-                return 'as'
-            elif part == 28:
-                text_submode = 'mixed'
-                return 'ml'
-            elif part == 29:
-                text_shift = 'punct'
-                return 'ps'
-            else:
-                if text_shift:
-                    ret = text_dict[text_shift][part]
-                    text_shift = False
-                else:
-                    ret = text_dict[text_submode][part]
-                return ret
-
-        elif text_submode == 'mixed':
-            if part == 25:
-                text_submode = 'punct'
-                return 'pl'
-            elif part == 27:
-                text_submode = 'lower'
-                return 'll'
-            elif part == 28:
-                text_submode = 'upper'
-                return 'al'
-            elif part == 29:
-                text_shift = 'punct'
-                return 'ps'
-            else:
-                if text_shift:
-                    ret = text_dict[text_shift][part]
-                    text_shift = False
-                else:
-                    ret = text_dict[text_submode][part]
-                return ret
-
-        elif text_submode == 'punct':
-            if part == 29:
-                text_submode = 'upper'
-                return 'al'
-            else:
-                if text_shift:
-                    ret = text_dict[text_shift][part]
-                    text_shift = False
-                else:
-                    ret = text_dict[text_submode][part]
-                return ret
-
-        else:
-            return 'Error'
 
     return (decode_part(H), decode_part(L))
-    
+
+
+def decode_number(cw):
+    global val_num
+    val_num *= 900
+    val_num += cw
+
+
 def get_cwinfo(codewords):
     l1 = codewords[0][0]
     l2 = codewords[1][0]
@@ -191,14 +239,15 @@ def _reset_global_vars():
 def pdf417_decode(img_path):
     mw = 0 # min-width of the barcode
     codewords = []
-    im = get_img(img_path)
+    im = add_quiet_zone(get_img(img_path))
     im_h = im.size[1]
     target = im.convert('L')
-    # print_img_info(target)
+    #print_img_info(target)
     
     for arow in each_row(target, 0, im_h):
         cw_of_row = []
         tmp_row = reformat(arow)
+        #print 'Row: ', tmp_row
         if len(tmp_row) == 1:
             continue
 
@@ -207,6 +256,7 @@ def pdf417_decode(img_path):
             mw = get_min_width(row)
 
         syms = row2syms(row, mw)
+        #print 'Syms: ', syms
         end = len(syms)/8+1
         for i in range(1, end):
             sym = get_codeword(syms, i)
@@ -217,25 +267,27 @@ def pdf417_decode(img_path):
             codewords.append(cw_of_row)
 
     info =  get_cwinfo(codewords)
-    codewords_list = filter_row_indicator(codewords)
+    codewords_list = [cw for row in codewords for cw in row[1:-1]]
     codewords_noerr = filter_err(codewords_list, info['error_level'])
-    vals = [decode_text(i) for i in codewords_noerr]
+
+    vals = [decode_cw(cw) for cw in codewords_noerr]
     _reset_global_vars()
 
-    print "*" * 80
-    print "found the codewords:", codewords
-    print "*" * 80
-    print "data codewords:",codewords_list
-    print "*" * 80
-    print "codewords without error message :", codewords_noerr
-    print "*" * 80
-    print "found ascii text index:", vals
-    print "*" * 80
-    print "contents:", get_content(vals)
-    print "*" * 80
-    print "*" * 80
+    # print "*" * 80
+    # print "found the codewords:", codewords
+    # print "*" * 80
+    # print "data codewords:",codewords_list
+    # print "*" * 80
+    # print "codewords without error message :", codewords_noerr
+    # print "*" * 80
+    # print "found ascii text index:", vals
+    # print "*" * 80
+    # print get_content(vals)
+    # print "*" * 80
+    # print "*" * 80
+
+    return get_content(vals)[1:]
 
 
 if __name__ == '__main__':
-    pdf417_decode("./test/123456789.gif")
-    pdf417_decode("./test/PDF417.png")
+    pass
