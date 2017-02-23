@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from PIL import Image
 import itertools
 from pdf417dict import codewords_tbl
@@ -290,4 +292,5 @@ def pdf417_decode(img_path):
 
 
 if __name__ == '__main__':
-    pass
+    ret = pdf417_decode(sys.argv[1])
+    print ret
